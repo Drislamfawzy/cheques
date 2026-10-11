@@ -1,0 +1,891 @@
+<script>
+  // Phase 1 Security Fix: HTML Injection & XSS Mitigation
+  function escapeHtml(unsafe) {
+      if(!unsafe) return "";
+      return unsafe.toString()
+           .replace(/&/g, "&amp;")
+           .replace(/</g, "&lt;")
+           .replace(/>/g, "&gt;")
+           .replace(/"/g, "&quot;")
+           .replace(/'/g, "&#039;");
+  }
+
+  function sanitizeForJs(str) {
+      if(!str) return "";
+      return str.toString().replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+  }
+
+  function formatCurrency(amount) {
+    if (!amount || isNaN(amount)) return '0';
+    return Number(amount).toLocaleString('ar-EG');
+  }
+
+  function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+
+  function parseLocalDateJS(dateStr) {
+    if (!dateStr) return null;
+    var parts = dateStr.split('-');
+    if (parts.length !== 3) {
+      var d = new Date(dateStr);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    var d2 = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+    return isNaN(d2.getTime()) ? null : d2;
+  }
+
+  function isMobileDevice() {
+    var uaMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return uaMobile || window.innerWidth <= 768;
+  }
+
+  function applyResponsiveModals() {
+    var mobile = isMobileDevice();
+    document.body.classList.toggle('device-mobile', mobile);
+    ['cashFlowModal', 'decisionModal', 'activeChequesModal', 'quickClearModal', 'quickTransactionModal', 'reconciliationModal', 'shockSimulatorModal', 'mtfTreasuryModal', 'welcomeModal'].forEach(function(id){
+      var dialog = document.querySelector('#' + id + ' .modal-dialog');
+      if (!dialog) return;
+      if (mobile) {
+        dialog.classList.add('modal-fullscreen');
+        dialog.classList.remove('modal-dialog-centered', 'modal-lg');
+      } else {
+        dialog.classList.remove('modal-fullscreen');
+      }
+    });
+  }
+  window.addEventListener('resize', applyResponsiveModals);
+
+  function populateDashboard(stats) {
+    if (!stats || stats.error) return;
+    document.getElementById('in-total').innerText = formatCurrency(stats.INCOMING.total) + ' ج.م';
+    document.getElementById('in-count').innerText = stats.INCOMING.count;
+    document.getElementById('out-total').innerText = formatCurrency(stats.OUTGOING.total) + ' ج.م';
+    document.getElementById('out-count').innerText = stats.OUTGOING.count;
+
+    var badge = document.getElementById('liquidity-badge');
+    badge.classList.remove('liquidity-safe','liquidity-warning','liquidity-danger');
+    if (stats.liquidityStatus === 'danger') {
+      badge.classList.add('liquidity-danger');
+      badge.innerText = 'الوضع: خطر 🔴 - الالتزامات تفوق المتاح';
+    } else if (stats.liquidityStatus === 'warning') {
+      badge.classList.add('liquidity-warning');
+      badge.innerText = 'الوضع: تحذير 🟡 - السيولة متقاربة';
+    } else {
+      badge.classList.add('liquidity-safe');
+      badge.innerText = 'مَاشَاءَ اللَّهُ، لَا قُوَّةَ إِلَّا بِاللَّهِ - الوضع: آمن 🟢 - السيولة المضمونة تغطي الالتزامات';
+    }
+
+    var snapshotEl = document.getElementById('executive-snapshot');
+    if(snapshotEl && stats.netLiquiditySnapshot !== undefined) {
+      var colorClass = stats.netLiquiditySnapshot >= 0 ? "text-success" : "text-danger";
+      snapshotEl.innerHTML = `صافي السيولة المتاحة المضمونة الآن: <span class="${colorClass}">${formatCurrency(stats.netLiquiditySnapshot)} ج.م</span>
+        <div class="small text-muted mt-1" style="font-size:12px;">(الرقم لا يشمل المتأخرات، وبعد تجميد ${formatCurrency(stats.cashFloor)} ج.م طوارئ)</div>`;
+    }
+
+    var confNote = document.getElementById('confidence-note');
+    if(confNote && stats.overallConfidence) {
+      if(stats.overallConfidence === "low" || stats.overallConfidence === "medium") {
+         confNote.innerHTML = "⚠️ تنبيه سيادي: قرار السيولة مبني على أرصدة متقادمة (تجاوزت 7 أيام بدون تسوية). يُرجى الحذر.";
+      } else { confNote.innerHTML = ""; }
+    }
+
+    var tasksContainer = document.getElementById('today-tasks-container');
+    if(tasksContainer && stats.todayTasks) {
+      if (stats.todayTasks.length === 0) {
+        tasksContainer.innerHTML = '<div class="text-center text-success small py-2">لا توجد مهام عاجلة أو متأخرة اليوم 🎉</div>';
+      } else {
+        stats.todayTasks.sort(function(a, b) { return (a.Is_Overdue === b.Is_Overdue) ? 0 : (a.Is_Overdue ? -1 : 1); });
+        var tasksHtml = stats.todayTasks.map(function(t) {
+          var typeIcon = t.Type === 'INCOMING' ? '📥' : '📤';
+          var typeColor = t.Type === 'INCOMING' ? 'text-success' : 'text-danger';
+          var alertBadge = t.Is_Overdue ? '<span class="badge bg-danger ms-1" style="font-size:9px;">متأخر</span>' : '<span class="badge bg-warning text-dark ms-1" style="font-size:9px;">اليوم</span>';
+          return `<div class="d-flex justify-content-between align-items-center border-bottom py-1 px-2" style="font-size:11px;">
+                    <div>${typeIcon} <span class="fw-bold">${escapeHtml(t.Party_Name || 'غير محدد')}</span> (${escapeHtml(t.Cheque_Number)}) ${alertBadge}</div>
+                    <div class="fw-bold ${typeColor}">${formatCurrency(t.Amount)} ج.م</div>
+                  </div>`;
+        }).join('');
+        tasksContainer.innerHTML = tasksHtml;
+      }
+    }
+
+    if (stats.bankPanels) { renderBankPanels(stats.bankPanels); } else { loadBankPanels(); }
+  }
+
+  function renderBankPanels(panels) {
+    var containerBanks = document.getElementById('bank-panels-row');
+    var containerMTF = document.getElementById('mtf-panel-row');
+    if (!containerBanks || !containerMTF) return;
+    
+    containerBanks.innerHTML = "";
+    containerMTF.innerHTML = "";
+    if (!panels || panels.length === 0) return;
+
+    panels.forEach(function(p, index) {
+      var detailId = 'bank-detail-' + index;
+      var daysSince = "غير متوفر";
+      var daysBadge = "bg-light text-dark border";
+      
+      if (p.lastReconciliationDate) {
+        var dObj = parseLocalDateJS(p.lastReconciliationDate);
+        if(dObj) {
+          dObj.setHours(0,0,0,0);
+          var today = new Date();
+          today.setHours(0,0,0,0);
+          var diff = Math.floor((today.getTime() - dObj.getTime()) / 86400000);
+          daysSince = diff === 0 ? "اليوم" : "منذ " + diff + " يوم";
+          
+          if (diff > 7) {
+            daysBadge = "bg-danger text-white";
+            daysSince += " ⚠️";
+          } else if (diff > 3) {
+            daysBadge = "bg-warning text-dark";
+          }
+        }
+      }
+
+      var isMTF = p.bank === "MTF";
+      var cardStyle = isMTF ? "border-dark bg-dark text-white" : "border-primary bg-white";
+      var titleStyle = isMTF ? "text-warning" : "text-primary";
+      var valStyle = isMTF ? "text-white" : "text-dark";
+      var icon = isMTF ? "🛡️" : "🏦";
+
+      var cardHtml = `
+        <div class="${isMTF ? 'col-12' : 'col-12 col-md-4'}">
+          <div class="card shadow-sm p-2 ${cardStyle}">
+            <div class="d-flex justify-content-between align-items-center" style="cursor:pointer;" onclick="toggleCardDetails('${detailId}')">
+              <span class="fw-bold small ${titleStyle}">${icon} ${escapeHtml(p.bank)}</span>
+              <div class="d-flex align-items-center gap-2">
+                <span class="fw-bold fs-6 ${valStyle}" title="الرصيد الحي المقدّر">${formatCurrency(p.estimatedActualBalance)} ج.م</span>
+                <span class="${isMTF ? 'text-white' : 'text-muted'} fw-bold" style="font-size: 12px;">▼</span>
+              </div>
+            </div>
+            
+            <div id="${detailId}" class="d-none mt-2 pt-2 border-top small ${isMTF ? 'text-light' : 'text-muted'}">
+              <div class="d-flex justify-content-between mb-1">
+                <span>الرصيد المتوقع (دفتري):</span>
+                <span class="fw-bold ${valStyle}">${formatCurrency(p.expectedBalance)} ج.م</span>
+              </div>
+              <div class="d-flex justify-content-between mb-1">
+                <span>آخر رصيد مؤكد (يدوي):</span>
+                <span class="fw-bold text-primary">${formatCurrency(p.actualBalance)} ج.م</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mt-2">
+                <span class="badge ${daysBadge} px-2" style="font-size: 10px;">آخر تسوية: ${daysSince}</span>
+                <button class="btn btn-sm ${isMTF ? 'btn-outline-warning' : 'btn-outline-primary'} py-0" style="font-size: 10px;" onclick="openReconciliationModal('${escapeHtml(p.bank)}', ${p.expectedBalance})">تسوية الرصيد ⚙️</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (isMTF) { containerMTF.innerHTML += cardHtml; } else { containerBanks.innerHTML += cardHtml; }
+    });
+  }
+
+  function toggleCardDetails(elementId) {
+    var el = document.getElementById(elementId);
+    if (el) { el.classList.toggle('d-none'); }
+  }
+
+  function loadBankPanels() { google.script.run.withSuccessHandler(renderBankPanels).getBankAccountsPanel(); }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    google.script.run.withSuccessHandler(populateDashboard).getHomeScreenData();
+    applyResponsiveModals();
+
+    // إظهار نافذة الترحيب (مَاشَاءَ اللَّهُ، لَا قُوَّةَ إِلَّا بِاللَّهِ) تلقائياً عند فتح الصفحة
+    var welcomeEl = document.getElementById('welcomeModal');
+    if (welcomeEl) {
+        var welcomeModal = new bootstrap.Modal(welcomeEl);
+        welcomeModal.show();
+    }
+  });
+
+  function showView(viewId) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.add('d-none'));
+    var target = document.getElementById(viewId);
+    if(target) target.classList.remove('d-none');
+    window.scrollTo(0, 0);
+  }
+
+  function goToHomeDirectly() {
+    ['activeChequesModal', 'quickClearModal', 'cashFlowModal', 'decisionModal', 'quickTransactionModal', 'reconciliationModal', 'shockSimulatorModal', 'mtfTreasuryModal', 'welcomeModal'].forEach(function(modalId) {
+      var modalEl = document.getElementById(modalId);
+      if (modalEl) {
+        var modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) { modalInstance.hide(); }
+      }
+    });
+    document.querySelectorAll('.modal-backdrop').forEach(function(el){ el.remove(); });
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    showView('dashboard-view');
+  }
+
+  var selectedImageBase64 = null;
+  var selectedImageMime = null;
+
+  function handleImageSelect(event) {
+    var file = event.target.files[0];
+    if (!file) { selectedImageBase64 = null; return; }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        var MAX_WIDTH = 1200, MAX_HEIGHT = 1200;
+        var width = img.width, height = img.height;
+        if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
+        else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+        canvas.width = width; canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        selectedImageMime = 'image/jpeg';
+        var preview = document.getElementById('image-preview');
+        if (preview) { preview.src = selectedImageBase64; preview.classList.remove('d-none'); }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function toggleInstrumentType() {
+    var isTransfer = document.getElementById('inst-transfer').checked;
+    document.getElementById('number-label').innerText = isTransfer ? "رقم المرجع (رقم الحوالة)" : "رقم الشيك";
+    document.getElementById('date-label').innerText = isTransfer ? "تاريخ التنفيذ" : "تاريخ الاستحقاق";
+  }
+
+  function toggleTransactionType() {
+    var isOutgoing = document.getElementById('type-outgoing').checked;
+    var container = document.getElementById('expense-category-container');
+    if (isOutgoing) { container.classList.remove('d-none'); } 
+    else { container.classList.add('d-none'); document.getElementById('expense-category-select').value = ""; }
+  }
+
+  function handlePartySelectChange() {
+    var selectVal = document.getElementById('party-name-select').value;
+    var otherInput = document.getElementById('party-name-other');
+    if (selectVal === "OTHER") { otherInput.classList.remove('d-none'); otherInput.focus(); } 
+    else { otherInput.classList.add('d-none'); otherInput.value = ""; }
+  }
+
+  function openAddCheque() {
+    document.getElementById('party-name-select').value = '';
+    document.getElementById('party-name-other').value = '';
+    document.getElementById('party-name-other').classList.add('d-none');
+    document.getElementById('bank-name-select').value = 'NBE';
+    document.getElementById('cheque-number').value = '';
+    document.getElementById('cheque-amount').value = '';
+    document.getElementById('due-date').value = '';
+    document.getElementById('invoice-date').value = '';
+    document.getElementById('cheque-notes').value = '';
+    document.getElementById('type-incoming').checked = true;
+    document.getElementById('inst-cheque').checked = true;
+    toggleInstrumentType(); toggleTransactionType();
+    
+    if (document.getElementById('cheque-camera-input')) document.getElementById('cheque-camera-input').value = '';
+    if (document.getElementById('cheque-studio-input')) document.getElementById('cheque-studio-input').value = '';
+    var preview = document.getElementById('image-preview');
+    if (preview) { preview.src = ''; preview.classList.add('d-none'); }
+    selectedImageBase64 = null; selectedImageMime = null;
+    showView('add-cheque-view');
+  }
+
+  function saveChequeData() {
+    const typeRadio = document.querySelector('input[name="chequeTypeRadio"]:checked');
+    const chequeType = typeRadio ? typeRadio.value : "INCOMING";
+    const instRadio = document.querySelector('input[name="instrumentTypeRadio"]:checked');
+    const instrumentType = instRadio ? instRadio.value : "CHEQUE";
+    const chequeNum = document.getElementById('cheque-number').value.trim();
+    const amount = document.getElementById('cheque-amount').value;
+    let partySelect = document.getElementById('party-name-select').value;
+    let partyName = (partySelect === "OTHER") ? document.getElementById('party-name-other').value.trim() : partySelect;
+    let bankName = document.getElementById('bank-name-select').value;
+
+    if (!partyName || !bankName || !chequeNum || !amount) {
+      alert("الرجاء استكمال البيانات الأساسية (الطرف، البنك، رقم المعاملة، والمبلغ).");
+      return;
+    }
+
+    let notes = document.getElementById('cheque-notes').value.trim();
+    if (chequeType === "OUTGOING") {
+      let expenseCategory = document.getElementById('expense-category-select').value;
+      if (expenseCategory) { notes = notes ? `[${expenseCategory}] - ${notes}` : `[${expenseCategory}]`; }
+    }
+
+    const chequeData = {
+      Type: chequeType,
+      Instrument_Type: instrumentType,
+      Party_Name: partyName,
+      Bank_Name: bankName,
+      Cheque_Number: chequeNum,
+      Amount: amount,
+      Due_Date: document.getElementById('due-date').value,
+      Invoice_Date: document.getElementById('invoice-date').value,
+      Cheque_Date: new Date().toISOString().split('T')[0],
+      Notes: notes
+    };
+
+    var btn = document.getElementById('save-cheque-btn');
+    btn.disabled = true; btn.innerText = "جاري الحفظ والمزامنة...";
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        if (!response.success) { btn.disabled = false; btn.innerText = "💾 حفظ المعاملة المالية"; alert("خطأ: " + response.error); return; }
+        if (selectedImageBase64) {
+          btn.innerText = "جاري رفع الصورة المضغوطة وربطها بالشيك...";
+          google.script.run.withSuccessHandler(function() { finishSave(btn); }).withFailureHandler(function(err) { finishSave(btn); alert("تم الحفظ لكن فشل رفع الصورة: " + err.message); }).uploadChequeImage(chequeNum, selectedImageBase64, selectedImageMime, "doc", instrumentType);
+        } else { finishSave(btn); }
+      }).withFailureHandler(function(err) { btn.disabled = false; btn.innerText = "💾 حفظ المعاملة المالية"; alert("فشل الاتصال: " + err.message); }).saveChequeToSheet(chequeData);
+  }
+
+  function finishSave(btn) {
+    btn.disabled = false; btn.innerText = "💾 حفظ المعاملة المالية"; alert("تم حفظ المعاملة وربط المستند بنجاح!"); showView('dashboard-view');
+    google.script.run.withSuccessHandler(populateDashboard).getHomeScreenData();
+  }
+
+  let allActiveCheques = []; let isClearedView = false; let currentActiveFilter = 'ALL'; let currentPeriodFilter = 'ALL'; let currentSortDir = 'ASC';
+
+  function toggleSortOrder() {
+    currentSortDir = (currentSortDir === 'ASC') ? 'DESC' : 'ASC';
+    document.getElementById('sort-toggle-btn').innerText = (currentSortDir === 'ASC') ? '⬇️ الأقرب أولاً' : '⬆️ الأبعد أولاً';
+    if (isClearedView) { openClearedChequesModal(true); } else { openActiveChequesModal(true); }
+  }
+
+  function openActiveChequesModal(skipReset) {
+    isClearedView = false;
+    if (!skipReset) { currentActiveFilter = 'ALL'; currentPeriodFilter = 'ALL'; document.getElementById('live-search-input').value = ''; }
+    document.getElementById('modal-main-title').innerText = "📋 المعاملات المعلقة والكروت التفاعلية";
+    document.getElementById('batch-action-bar').style.display = 'block';
+    document.getElementById('cheques-cards-container').innerHTML = '<div class="col-12 text-center text-muted py-4"><small>⏳ جاري تحميل المعاملات...</small></div>';
+    var modalElNow = document.getElementById('activeChequesModal');
+    var myModalNow = bootstrap.Modal.getInstance(modalElNow) || new bootstrap.Modal(modalElNow);
+    myModalNow.show();
+
+    google.script.run.withSuccessHandler(function(cheques) {
+        allActiveCheques = cheques || [];
+        renderChequesCards(allActiveCheques); applyFilters();
+      }).withFailureHandler(function(err) { alert("خطأ في جلب البيانات: " + err.message); }).getActiveChequesList(currentSortDir);
+  }
+
+  function openClearedChequesModal(skipReset) {
+    isClearedView = true;
+    if (!skipReset) { currentActiveFilter = 'ALL'; currentPeriodFilter = 'ALL'; document.getElementById('live-search-input').value = ''; }
+    document.getElementById('modal-main-title').innerText = "📁 أرشيف المعاملات المحصلة والمنفذة";
+    document.getElementById('batch-action-bar').style.display = 'none';
+    document.getElementById('cheques-cards-container').innerHTML = '<div class="col-12 text-center text-muted py-4"><small>⏳ جاري تحميل الأرشيف...</small></div>';
+    var modalElNow2 = document.getElementById('activeChequesModal');
+    var myModalNow2 = bootstrap.Modal.getInstance(modalElNow2) || new bootstrap.Modal(modalElNow2);
+    myModalNow2.show();
+
+    google.script.run.withSuccessHandler(function(cheques) {
+        allActiveCheques = cheques || []; renderChequesCards(cheques || []); applyFilters();
+      }).withFailureHandler(function(err) { alert("خطأ في جلب الأرشيف: " + err.message); }).getClearedChequesList(currentSortDir);
+  }
+
+  function refreshMissingImages() {
+    if (!confirm("سيتم البحث في الدرايف عن أي صور مستندات لم تُربط بعد بمعاملاتها. متابعة؟")) return;
+    var btn = event.target; var originalText = btn.innerText; btn.innerText = "⏳ جاري البحث..."; btn.disabled = true;
+    google.script.run.withSuccessHandler(function(res) {
+        btn.innerText = originalText; btn.disabled = false;
+        if (res.success) { alert("تم تحديث " + res.updated + " رابط صورة بنجاح ✅"); if (isClearedView) { openClearedChequesModal(true); } else { openActiveChequesModal(true); } } 
+        else { alert("خطأ: " + res.error); }
+      }).withFailureHandler(function(err) { btn.innerText = originalText; btn.disabled = false; alert("فشل الاتصال: " + err.message); }).refreshMissingImageLinks();
+  }
+
+  function toggleClearedChequesView() { if (isClearedView) { openActiveChequesModal(); } else { openClearedChequesModal(); } }
+
+ function renderChequesCards(cheques) {
+  const container = document.getElementById('cheques-cards-container');
+  if(!container) return; container.innerHTML = "";
+  if (!cheques || cheques.length === 0) { container.innerHTML = '<div class="col-12 text-center text-muted py-4"><small>لا توجد معاملات مطابقة.</small></div>'; return; }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const htmlParts = [];
+
+  cheques.forEach(chq => {
+    let isOverdue = false;
+    if (chq.Due_Date && !isClearedView) {
+      let dueDateObj = parseLocalDateJS(chq.Due_Date);
+      if (dueDateObj) { dueDateObj.setHours(0,0,0,0); isOverdue = dueDateObj < today; }
+    }
+
+    let badgeColor = chq.Type === 'INCOMING' ? 'bg-success' : 'bg-danger';
+    let typeText = chq.Type === 'INCOMING' ? 'وارد 📥' : 'صادر 📤';
+    let instBadge = chq.Instrument_Type === 'BANK_TRANSFER' ? '🏦 تحويل بنكي' : '📄 شيك';
+    let imgLink = isClearedView ? (chq.Drive_Cleared || chq.Drive_Original) : chq.Drive_Original;
+    let imgBtnHtml = imgLink ? `<a href="${escapeHtml(imgLink)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary w-100 mb-1 py-2 fw-bold" style="font-size: 13px;">🖼️ عرض المستند / الإيصال ↗️</a>` : '<div class="text-muted small text-center mb-1 text-danger">⚠️ لم يتم إرفاق صورة أو لم يتم ربطها بعد</div>';
+    
+    // التعديل الذكي في الأزرار بناءً على نوع المعاملة
+    let actionBtnHtml = '';
+    if (!isClearedView) {
+      if (chq.Type === 'OUTGOING') {
+        actionBtnHtml = `<button type="button" class="btn btn-sm btn-outline-danger w-100 py-2 fw-bold" style="font-size: 13px;" onclick="quickClearFromCard('${sanitizeForJs(chq.Cheque_Number)}')">📤 سداد وخصم من البنك</button>`;
+      } else {
+        actionBtnHtml = `<button type="button" class="btn btn-sm btn-outline-success w-100 py-2 fw-bold" style="font-size: 13px;" onclick="quickClearFromCard('${sanitizeForJs(chq.Cheque_Number)}')">📥 تحصيل وإيداع بالبنك</button>`;
+      }
+    } else {
+      actionBtnHtml = `<span class="badge bg-secondary w-100 py-2" style="font-size: 12px;">✅ مُنجز بتاريخ ${escapeHtml(chq.Cleared_Date || 'غير محدد')}</span>`;
+    }
+
+    let cardHtml = `
+      <div class="col-12 col-md-6 cheque-card-item mb-2" data-type="${chq.Type}" data-overdue="${isOverdue}" data-duedate="${escapeHtml(chq.Due_Date || '')}" data-search="${escapeHtml((chq.Cheque_Number + ' ' + (chq.Bank_Name || '') + ' ' + (chq.Party_Name || '')).toLowerCase())}">
+        <div class="card border-1 shadow-sm p-3 rounded-3">
+          <div class="card-body p-0">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div><span class="badge ${badgeColor} px-2 py-1">${typeText}</span> <span class="badge bg-dark text-white ms-1 px-2 py-1">${instBadge}</span></div>
+              <span class="text-muted fw-bold small">${escapeHtml(chq.Cheque_ID)}</span>
+            </div>
+            <h4 class="text-primary fw-bold mb-2">${formatCurrency(chq.Amount)} ج.م</h4>
+            <p class="small mb-1 text-dark"><strong>الطرف:</strong> ${escapeHtml(chq.Party_Name || 'غير محدد')}</p>
+            <p class="small mb-1 text-dark"><strong>البنك/القناة:</strong> ${escapeHtml(chq.Bank_Name || '-')}</p>
+            <p class="small mb-3 text-dark"><strong>المرجع:</strong> ${escapeHtml(chq.Cheque_Number)} | <strong>التاريخ:</strong> <span class="${isOverdue ? 'text-danger fw-bold' : ''}">${escapeHtml(chq.Due_Date || '-')} ${isOverdue ? '⚠️ متأخر' : ''}</span></p>
+            ${imgBtnHtml} ${actionBtnHtml}
+          </div>
+        </div>
+      </div>
+    `;
+    htmlParts.push(cardHtml);
+  });
+  container.innerHTML = htmlParts.join('');
+}
+
+  function applyFilters() {
+    let query = document.getElementById('live-search-input').value.toLowerCase().trim();
+    let items = document.querySelectorAll('.cheque-card-item');
+    let today = new Date(); today.setHours(0,0,0,0);
+    let in7Days = new Date(today.getTime() + (7 * 24 * 60 * 60 * 1000));
+    let limitQuarter = new Date(today.getTime() + (90 * 24 * 60 * 60 * 1000));
+
+    items.forEach(item => {
+      let type = item.getAttribute('data-type');
+      let isOverdue = item.getAttribute('data-overdue') === 'true';
+      let dueDateStr = item.getAttribute('data-duedate');
+      let searchText = item.getAttribute('data-search');
+      let dueDate = dueDateStr ? parseLocalDateJS(dueDateStr) : null;
+      if (dueDate) dueDate.setHours(0,0,0,0);
+
+      let matchesSearch = !query || searchText.includes(query);
+      let matchesChip = true;
+      if (currentActiveFilter === 'TODAY') { matchesChip = !!dueDate && dueDate.getTime() === today.getTime(); } 
+      else if (currentActiveFilter === 'WEEK') { matchesChip = !!dueDate && dueDate >= today && dueDate <= in7Days; } 
+      else if (currentActiveFilter === 'OVERDUE') { matchesChip = isOverdue; } 
+      else if (currentActiveFilter === 'INCOMING') { matchesChip = type === 'INCOMING'; } 
+      else if (currentActiveFilter === 'OUTGOING') { matchesChip = type === 'OUTGOING'; }
+
+      let matchesPeriod = true;
+      if (currentPeriodFilter === 'WEEK') { matchesPeriod = !!dueDate && dueDate >= today && dueDate <= in7Days; } 
+      else if (currentPeriodFilter === 'MONTH') { matchesPeriod = !!dueDate && dueDate.getMonth() === today.getMonth() && dueDate.getFullYear() === today.getFullYear(); } 
+      else if (currentPeriodFilter === 'QUARTER') { matchesPeriod = !!dueDate && dueDate >= today && dueDate <= limitQuarter; }
+
+      item.style.display = (matchesSearch && matchesChip && matchesPeriod) ? 'block' : 'none';
+    });
+  }
+
+  function filterByPeriod(period) { currentPeriodFilter = period; applyFilters(); }
+  function filterByChip(filterType, element) { document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active')); element.classList.add('active'); currentActiveFilter = filterType; applyFilters(); }
+  function filterChequesCards() { applyFilters(); }
+
+  function openQuickClearModal() { 
+      document.getElementById('quick-clear-num').value = ''; 
+      var modalEl = document.getElementById('quickClearModal'); 
+      var quickModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); 
+      quickModal.show(); 
+  }
+
+  function openBatchClearModal() {
+    var activeModalEl = document.getElementById('activeChequesModal'); 
+    var activeModal = bootstrap.Modal.getInstance(activeModalEl); 
+    if (activeModal) activeModal.hide();
+    
+    document.getElementById('quick-clear-num').value = ''; 
+    
+    setTimeout(function() {
+        var quickModalEl = document.getElementById('quickClearModal'); 
+        var quickModal = bootstrap.Modal.getInstance(quickModalEl) || new bootstrap.Modal(quickModalEl); 
+        quickModal.show();
+    }, 500); 
+  }
+
+  function quickClearFromCard(chequeNum) {
+    var activeModalEl = document.getElementById('activeChequesModal'); 
+    var activeModal = bootstrap.Modal.getInstance(activeModalEl); 
+    if (activeModal) activeModal.hide();
+    
+    document.getElementById('quick-clear-num').value = chequeNum; 
+    
+    setTimeout(function() {
+        var quickModalEl = document.getElementById('quickClearModal'); 
+        var quickModal = bootstrap.Modal.getInstance(quickModalEl) || new bootstrap.Modal(quickModalEl); 
+        quickModal.show();
+    }, 500); 
+  }
+
+  function executeQuickClear() {
+    let rawInput = document.getElementById('quick-clear-num').value.trim();
+    if (!rawInput) { alert("الرجاء إدخال رقم المعاملة."); return; }
+    let chequeNumbers = rawInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    
+    var btn = document.querySelector("#quickClearModal .btn-warning");
+    var oldText = "تنفيذ";
+    if (btn) {
+        oldText = btn.innerText;
+        btn.innerText = "جاري التنفيذ..."; 
+        btn.disabled = true;
+    }
+
+    google.script.run.withSuccessHandler(function(res) {
+        if (btn) { btn.innerText = oldText; btn.disabled = false; }
+        if(res.success) {
+            alert("تم التنفيذ بنجاح لعدد " + res.updated + " معاملة!");
+            
+            var modalEl = document.getElementById('quickClearModal'); 
+            var quickModal = bootstrap.Modal.getInstance(modalEl); 
+            if (quickModal) quickModal.hide();
+            
+            google.script.run.withSuccessHandler(populateDashboard).getHomeScreenData(); 
+            
+            setTimeout(function() { openActiveChequesModal(); }, 500); 
+            
+        } else { alert("خطأ: " + res.error); }
+    }).withFailureHandler(function(err) { 
+        if (btn) { btn.innerText = oldText; btn.disabled = false; }
+        alert("خطأ: " + err.message); 
+    }).quickClearChequesBatch(chequeNumbers, "تسوية مباشرة من النظام");
+  }
+
+  function openQuickTransactionModal() {
+    document.getElementById('qt-amount').value = ''; document.getElementById('qt-reason').value = ''; document.getElementById('qt-dir-in').checked = true; toggleTransferBank();
+    var modalEl = document.getElementById('quickTransactionModal'); var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); modal.show();
+  }
+
+  function toggleTransferBank() {
+    var isTransfer = document.getElementById('qt-dir-transfer').checked;
+    if (isTransfer) { document.getElementById('qt-to-bank-container').classList.remove('d-none'); } 
+    else { document.getElementById('qt-to-bank-container').classList.add('d-none'); }
+  }
+
+  function submitQuickTransaction() {
+    var bank = document.getElementById('qt-bank').value;
+    var amount = document.getElementById('qt-amount').value;
+    var direction = document.querySelector('input[name="qtDir"]:checked').value;
+    var reason = document.getElementById('qt-reason').value;
+    var toBank = document.getElementById('qt-to-bank').value;
+
+    if (!amount) { alert("الرجاء إدخال المبلغ."); return; }
+
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+          alert("تم حفظ الحركة السريعة بنجاح ✅");
+          var modalEl = document.getElementById('quickTransactionModal'); var modal = bootstrap.Modal.getInstance(modalEl); if (modal) modal.hide();
+          google.script.run.withSuccessHandler(populateDashboard).getHomeScreenData();
+        } else { alert("خطأ: " + res.error); }
+      }).saveQuickTransaction(bank, amount, direction, reason, toBank);
+  }
+
+  function openReconciliationModal(bankName, expectedBal) {
+    document.getElementById('rec-bank-name').value = bankName; document.getElementById('rec-modal-title').innerText = "🏦 تسوية الرصيد الفعلي لبنك: " + bankName;
+    document.getElementById('rec-expected-display').value = formatCurrency(expectedBal) + " ج.م"; document.getElementById('rec-actual-input').value = "";
+    var modalEl = document.getElementById('reconciliationModal'); var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); modal.show();
+    loadVarianceChart(bankName);
+  }
+
+  function submitReconciliation() {
+    var bankName = document.getElementById('rec-bank-name').value; var actualBalance = document.getElementById('rec-actual-input').value;
+    if (actualBalance === "") { alert("الرجاء إدخال الرصيد الفعلي."); return; }
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+          alert("تم حفظ التسوية بنجاح ✅");
+          var modalEl = document.getElementById('reconciliationModal'); var modal = bootstrap.Modal.getInstance(modalEl); if (modal) modal.hide();
+          google.script.run.withSuccessHandler(populateDashboard).getHomeScreenData();
+        } else { alert("خطأ: " + res.error); }
+      }).saveReconciliation(bankName, actualBalance);
+  }
+
+  function loadVarianceChart(bankName) {
+    var container = document.getElementById('variance-chart-container'); container.innerHTML = '<span class="text-muted small">جاري تحميل الرسم البياني...</span>';
+    google.script.run.withSuccessHandler(function(trend) {
+        if (!trend || trend.length === 0) { container.innerHTML = '<span class="text-muted small">لا توجد تسويات سابقة لعرض المنحنى.</span>'; return; }
+        var width = 500, height = 150; var maxVal = Math.max.apply(null, trend.map(function(t){ return Math.abs(t.actual); })) || 100;
+        var points = ""; var step = trend.length > 1 ? (width - 60) / (trend.length - 1) : 0;
+        trend.forEach(function(t, idx) { var x = 40 + idx * step; var y = height - 30 - ((t.actual / maxVal) * (height - 50)); points += (idx === 0 ? "M " : "L ") + x + " " + y + " "; });
+        var svg = `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#fff; border-radius:6px;">`;
+        svg += `<line x1="40" y1="${height-30}" x2="${width-20}" y2="${height-30}" stroke="#ccc" stroke-width="1" />`;
+        svg += `<path d="${points}" fill="none" stroke="#0d6efd" stroke-width="2.5" />`;
+        trend.forEach(function(t, idx) { var x = 40 + idx * step; var y = height - 30 - ((t.actual / maxVal) * (height - 50)); svg += `<circle cx="${x}" cy="${y}" r="4" fill="#0d6efd" />`; svg += `<text x="${x}" y="${height-10}" font-size="9" text-anchor="middle" fill="#666">${escapeHtml(t.date)}</text>`; });
+        svg += `</svg>`; container.innerHTML = svg;
+      }).getVarianceTrend(bankName);
+  }
+
+  function shareWhatsAppReport() {
+    if (!allActiveCheques || allActiveCheques.length === 0) { alert("لا توجد بيانات لمشاركتها."); return; }
+    let text = "📋 *تقرير المعاملات المالية العاجلة*:\n\n";
+    allActiveCheques.forEach((chq, idx) => { text += `${idx + 1}. مكن: ${chq.Cheque_Number} | بقيمة: ${formatCurrency(chq.Amount)} ج.م | الطرف: ${chq.Party_Name} | التاريخ: ${chq.Due_Date}\n`; });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }
+
+  function sendEmailReport() {
+    if (!allActiveCheques || allActiveCheques.length === 0) { alert("لا توجد بيانات لإرسالها."); return; }
+    if (!confirm("هل تريد إرسال تقرير المعاملات إلى adhamamro55@gmail.com؟")) return;
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) { alert("تم إرسال التقرير بنجاح ✅"); } else { alert("خطأ: " + res.error); }
+      }).withFailureHandler(function(err) {
+        alert("فشل الاتصال: " + err.message);
+      }).sendEmailReportToServer(allActiveCheques);
+  }
+
+  function openCashFlowModal() {
+    document.getElementById('cashflow-result').innerHTML = '<div class="text-center text-muted small py-3">اختر فترة لعرض التوقعات...</div>'; applyResponsiveModals();
+    var modalEl = document.getElementById('cashFlowModal'); var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); modal.show(); loadCashFlow(30);
+  }
+
+  function loadCashFlow(days) {
+    document.getElementById('cashflow-result').innerHTML = '<div class="text-center text-muted small py-3">جاري الحساب...</div>';
+    google.script.run.withSuccessHandler(function(res) {
+        if (!res || res.error) { document.getElementById('cashflow-result').innerHTML = '<div class="text-danger small">خطأ في الحساب.</div>'; return; }
+        var statusClass = res.status === 'danger' ? 'liquidity-danger' : (res.status === 'warning' ? 'liquidity-warning' : 'liquidity-safe');
+        var statusText = res.status === 'danger' ? 'خطر 🔴' : (res.status === 'warning' ? 'تحذير 🟡' : 'آمن 🟢');
+        
+        function buildTable(list, typeClass) {
+          if(!list || list.length === 0) return '<div class="text-center text-muted small p-2">لا توجد معاملات</div>';
+          var rows = list.map(item => {
+            var clickAction = item.Img ? `window.open('${sanitizeForJs(item.Img)}', '_blank')` : `alert('⚠️ عذراً، لا توجد صورة مرفقة لهذه المعاملة')`;
+            var imgHint = item.Img ? '🖼️ (اضغط للعرض)' : '<i>بدون صورة</i>';
+            return `<tr style="cursor:pointer;" onclick="${clickAction}" title="اضغط لعرض صورة المستند" class="table-hover">
+              <td>${escapeHtml(item.Party || '-')}</td><td>${escapeHtml(item.Bank || '-')}</td><td class="fw-bold ${typeClass}">${formatCurrency(item.Amount)}</td>
+              <td class="small text-muted" style="font-size:10px;">${escapeHtml(item.Date)}<br><span class="text-primary" style="font-size:9px;">${imgHint}</span></td></tr>`;
+          }).join('');
+          return `<div class="table-responsive"><table class="table table-sm table-bordered table-hover mt-2 mb-0 bg-white" style="font-size:11px;">
+            <thead class="table-light"><tr><th>الطرف</th><th>البنك</th><th>المبلغ</th><th>التاريخ والمستند</th></tr></thead><tbody>${rows}</tbody>
+          </table><div class="text-center text-muted mt-1" style="font-size:9px;">💡 تلميح: الضغط على أي سطر يفتح صورة المستند مباشرة</div></div>`;
+        }
+
+        var incTable = buildTable(res.incomingList, 'text-success'); var outTable = buildTable(res.outgoingList, 'text-danger');
+        document.getElementById('cashflow-result').innerHTML = `
+          <div class="liquidity-badge ${statusClass} mb-3 text-center">الوضع خلال ${res.periodDays} يوم: ${statusText}</div>
+          <div class="row g-2">
+            <div class="col-12">
+              <div class="metric-box bg-light border-primary">
+                <div class="small text-muted fw-bold">🏦 إجمالي رصيد البنوك الفعلي حالياً</div>
+                <div class="fw-bold text-primary fs-5">${formatCurrency(res.bankBalance)} ج.م</div>
+              </div>
+            </div>
+            <div class="col-6"><div class="metric-box border-success" style="cursor:pointer;" onclick="document.getElementById('modal-inc-details-box').classList.toggle('d-none')"><div class="small text-muted">واردات متوقعة ⬇️</div><div class="fw-bold text-success">${formatCurrency(res.incoming)} ج.م</div></div></div>
+            <div class="col-6"><div class="metric-box border-danger" style="cursor:pointer;" onclick="document.getElementById('modal-out-details-box').classList.toggle('d-none')"><div class="small text-muted">التزامات متوقعة ⬇️</div><div class="fw-bold text-danger">${formatCurrency(res.outgoing)} ج.م</div></div></div>
+            <div class="col-12 d-none" id="modal-inc-details-box"><div class="p-1 border border-success rounded bg-light">${incTable}</div></div>
+            <div class="col-12 d-none" id="modal-out-details-box"><div class="p-1 border border-danger rounded bg-light">${outTable}</div></div>
+            <div class="col-12">
+              <div class="metric-box border-dark">
+                <div class="small text-muted fw-bold">📊 الرصيد المتوقع نهاية الفترة</div>
+                <div class="fw-bold ${res.projectedBalance>=0?'text-success':'text-danger'} fs-4">${formatCurrency(res.projectedBalance)} ج.م</div>
+              </div>
+            </div>
+          </div>`;
+      }).withFailureHandler(function(err) { document.getElementById('cashflow-result').innerHTML = '<div class="text-danger small">فشل الاتصال: ' + err.message + '</div>'; }).getCashFlowForecast(days);
+  }
+
+  function openDecisionDashboard() {
+    document.getElementById('decision-dashboard-body').innerHTML = '<div class="text-center text-muted small py-4">⏳ جاري التحقق من الصلاحية وتحميل البيانات...</div>';
+    applyResponsiveModals(); var modalEl = document.getElementById('decisionModal'); var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); modal.show();
+    google.script.run.withSuccessHandler(renderDecisionDashboard).withFailureHandler(function(err) { document.getElementById('decision-dashboard-body').innerHTML = '<div class="text-danger small">فشل الاتصال: ' + err.message + '</div>'; }).getDecisionDashboard();
+  }
+
+  function openShockSimulatorModal() {
+    document.getElementById('shock-result-container').classList.add('d-none');
+    document.getElementById('shock-result-container').innerHTML = '';
+    var modalEl = document.getElementById('shockSimulatorModal');
+    var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modal.show();
+  }
+
+  function runShockSimulationUI() {
+    var delayPct = document.getElementById('shock-delay-percent').value;
+    var horizon = document.getElementById('shock-horizon-days').value;
+    var container = document.getElementById('shock-result-container');
+    container.classList.remove('d-none');
+    container.innerHTML = '<div class="text-center text-muted">⏳ جاري حساب محاكاة الضغط وتتبع أقساط البنوك والخامات...</div>';
+
+    google.script.run.withSuccessHandler(function(res) {
+      if (!res.success) {
+        container.innerHTML = '<div class="text-danger">خطأ في تنفيذ المحاكاة: ' + escapeHtml(res.error) + '</div>';
+        return;
+      }
+
+      var instColor = res.installmentsCovered ? "text-success" : "text-danger fw-bold";
+      var instText = res.installmentsCovered ? "✅ مغطى بالكامل" : "❌ عجز بقيمة " + formatCurrency(Math.abs(res.totalAvailableUnderStress - res.installmentsDue)) + " ج.م";
+      
+      var matColor = res.materialsCovered ? "text-success" : "text-danger fw-bold";
+      var matText = res.materialsCovered ? "✅ مغطى بالكامل" : "❌ عجز بقيمة " + formatCurrency(Math.abs(res.totalAvailableUnderStress - res.installmentsDue - res.materialsDue)) + " ج.م";
+
+      var finalColor = res.finalRemaining >= 0 ? "text-success" : "text-danger fw-bold";
+
+      container.innerHTML = `
+        <div class="fw-bold mb-2 text-primary border-bottom pb-1">نتائج محاكاة الصدمة (أفق ${res.horizonDays} يوم - تأخير إيرادات ${res.delayPercent}%):</div>
+        <div class="d-flex justify-content-between mb-1"><span>إجمالي المتاح (بنوك + وارد بعد الضغط):</span><span class="fw-bold">${formatCurrency(res.totalAvailableUnderStress)} ج.م</span></div>
+        <div class="d-flex justify-content-between mb-1"><span>1. التزامات أقساط البنوك المستحقة:</span><span class="${instColor}">${formatCurrency(res.installmentsDue)} ج.م (${instText})</span></div>
+        <div class="d-flex justify-content-between mb-1"><span>2. التزامات الخامات المستحقة:</span><span class="${matColor}">${formatCurrency(res.materialsDue)} ج.م (${matText})</span></div>
+        <hr class="my-1">
+        <div class="d-flex justify-content-between"><span>الرصيد المتبقي / العجز النهائي:</span><span class="${finalColor} fs-6">${formatCurrency(res.finalRemaining)} ج.م</span></div>
+      `;
+    }).withFailureHandler(function(err) {
+      container.innerHTML = '<div class="text-danger">فشل الاتصال: ' + escapeHtml(err.message) + '</div>';
+    }).simulateShockScenario(delayPct, horizon);
+  }
+
+  function renderDecisionDashboard(data) {
+    if (!data) { document.getElementById('decision-dashboard-body').innerHTML = '<div class="text-danger small">تعذر تحميل البيانات.</div>'; return; }
+    if (data.authorized === false) { document.getElementById('decision-dashboard-body').innerHTML = '<div class="text-center py-4"><h2 style="color:#dc3545;">⛔ غير مصرح بالدخول</h2><p class="text-muted small">هذه اللوحة خاصة بالمدير المالي فقط. الإيميل المسجل: <b>' + escapeHtml(data.email || 'غير معروف') + '</b></p></div>'; return; }
+    if (data.error) { document.getElementById('decision-dashboard-body').innerHTML = '<div class="text-danger small">تعذر تحميل البيانات.</div>'; return; }
+
+    var ladderRows = data.maturityLadder.map(function(b) { return `<tr class="ladder-row"><td>${escapeHtml(b.label)}</td><td class="text-success">${formatCurrency(b.incoming)}</td><td class="text-danger">${formatCurrency(b.outgoing)}</td><td class="fw-bold ${((b.incoming-b.outgoing)>=0)?'text-success':'text-danger'}">${formatCurrency(b.incoming-b.outgoing)}</td></tr>`; }).join('');
+    var bankRows = data.bankExposure.slice(0,8).map(function(b) { return `<tr class="ladder-row"><td>${escapeHtml(b.bank)}</td><td class="text-success">${formatCurrency(b.incoming)}</td><td class="text-danger">${formatCurrency(b.outgoing)}</td></tr>`; }).join('') || '<tr><td colspan="3" class="text-center text-muted small">لا توجد بيانات</td></tr>';
+
+    var monopolyAlertHtml = "";
+    if (data.supplierConcentrationWarning) {
+      var m = data.supplierConcentrationWarning;
+      monopolyAlertHtml = `<div class="alert alert-danger py-2 mb-3" style="font-size:12px;">
+        <strong>🚨 تحذير احتكار الموردين:</strong> المورد <b>${escapeHtml(m.supplier)}</b> يمتلك نسبة <b>${escapeHtml(m.percentage)}%</b> (${formatCurrency(m.totalPaid)} ج.م) من إجمالي الالتزامات <b>الحالية غير المسددة</b>. يجب توزيع المخاطر!
+      </div>`;
+    }
+
+    var dsoRows = "";
+    if (data.dsoMetrics) {
+      var sortedCust = Object.keys(data.dsoMetrics).sort(function(a,b){ return data.dsoMetrics[b].avgDso - data.dsoMetrics[a].avgDso; });
+      dsoRows = sortedCust.map(function(cust) {
+        var info = data.dsoMetrics[cust];
+        var toxicBadge = info.isToxic ? '<span class="badge bg-danger ms-1" style="font-size:9px;" title="حجم تعاملات ضخم وتأخيرات مزمنة">سام ☠️</span>' : '<span class="badge bg-success ms-1" style="font-size:9px;">منتظم</span>';
+        var dsoColor = info.avgDso > 60 ? 'text-danger fw-bold' : 'text-dark';
+        return `<tr class="ladder-row" style="cursor:pointer;" onclick="alert('تفاصيل العميل: ${sanitizeForJs(cust)}\\nمتوسط التحصيل (DSO): ${info.avgDso} يوم\\nإجمالي الحجم: ${formatCurrency(info.totalVolume)} ج.م\\nعدد المتأخرات (النشطة): ${info.overdueCount}')" title="اضغط لفتح كارت التفاوض السريع">
+          <td>${escapeHtml(cust)} ${toxicBadge}</td>
+          <td class="${dsoColor}">${info.avgDso} يوم</td>
+          <td>${formatCurrency(info.totalVolume)} ج.م</td>
+          <td class="text-danger fw-bold">${info.overdueCount}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="4" class="text-center text-muted small">لا توجد بيانات كافية لحساب دورة النقدية</td></tr>';
+    }
+
+    function concentrationHtml(list) { if (!list || list.length === 0) return '<div class="text-muted small">لا توجد بيانات</div>'; return list.map(function(p) { return `<div class="d-flex justify-content-between small border-bottom py-1"><span>${escapeHtml(p.party)}</span><span class="fw-bold">${formatCurrency(p.amount)} ج.م (${p.percent.toFixed(0)}%)</span></div>`; }).join(''); }
+    var overdueRows = data.overdueList.slice(0,15).map(function(o) { return `<tr class="ladder-row"><td>${escapeHtml(o.Cheque_Number)}</td><td>${escapeHtml(o.Party_Name)}</td><td>${escapeHtml(o.Bank_Name)}</td><td>${formatCurrency(o.Amount)}</td><td class="text-danger fw-bold">${o.DaysOverdue} يوم</td></tr>`; }).join('') || '<tr><td colspan="5" class="text-center text-success small">لا توجد معاملات متأخرة 🎉</td></tr>';
+
+    document.getElementById('decision-dashboard-body').innerHTML = `
+      ${monopolyAlertHtml}
+      <h6 class="fw-bold mb-2">⚡ مؤشر دورة النقدية (DSO) وكارت التفاوض للعملاء <span class="text-muted" style="font-size:10px;">(اضغط على السطر لفتح الكارت)</span></h6>
+      <div class="table-responsive mb-4"><table class="table table-sm table-bordered table-hover">
+        <thead><tr><th>الطرف / العميل</th><th>متوسط التحصيل (DSO)</th><th>إجمالي التعاملات</th><th>متأخرات</th></tr></thead>
+        <tbody>${dsoRows}</tbody>
+      </table></div>
+
+      <h6 class="fw-bold mb-2">🪜 سلم الاستحقاق</h6><div class="table-responsive mb-4"><table class="table table-sm table-bordered"><thead><tr><th>الفترة</th><th>واردة</th><th>صادرة</th><th>الصافي</th></tr></thead><tbody>${ladderRows}</tbody></table></div>
+      <h6 class="fw-bold mb-2">🏦 التركّز حسب البنك / القناة</h6><div class="table-responsive mb-4"><table class="table table-sm table-bordered"><thead><tr><th>البنك / القناة</th><th>واردة</th><th>صادرة</th></tr></thead><tbody>${bankRows}</tbody></table></div>
+      <div class="row g-3 mb-4"><div class="col-12 col-md-6"><h6 class="fw-bold mb-2">📥 أعلى العملاء</h6>${concentrationHtml(data.concentration.INCOMING)}</div><div class="col-12 col-md-6"><h6 class="fw-bold mb-2">📤 أعلى الموردين</h6>${concentrationHtml(data.concentration.OUTGOING)}</div></div>
+      <h6 class="fw-bold mb-2">⚠️ المعاملات المتأخرة</h6><div class="table-responsive"><table class="table table-sm table-bordered"><thead><tr><th>رقم</th><th>الطرف</th><th>البنك</th><th>المبلغ</th><th>التأخير</th></tr></thead><tbody>${overdueRows}</tbody></table></div>
+    `;
+  }
+
+  function tryOpenFinancialProject() { openDecisionDashboard(); }
+
+  // Phase 3: MTF Smart Treasury Frontend Functions
+  function openMTFModal() {
+    document.getElementById('mtf-treasury-body').innerHTML = '<div class="text-center text-muted py-4">⏳ جاري تحليل الأرصدة والالتزامات...</div>';
+    var modalEl = document.getElementById('mtfTreasuryModal');
+    var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modal.show();
+    
+    google.script.run.withSuccessHandler(renderMTFTreasury).withFailureHandler(function(err){
+        document.getElementById('mtf-treasury-body').innerHTML = '<div class="text-danger text-center py-4">خطأ في الاتصال بالخادم: ' + escapeHtml(err.message) + '</div>';
+    }).getSmartTreasuryDecision();
+  }
+
+  function renderMTFTreasury(data) {
+    if (!data) return;
+    var sessionBadge = data.sessionOpen ? '<span class="badge bg-success" style="font-size:11px;">🟢 الجلسة مفتوحة</span>' : '<span class="badge bg-danger" style="font-size:11px;">🔴 الجلسة مغلقة</span>';
+    var actionDisabled = !data.sessionOpen ? 'disabled' : '';
+    
+    var html = `
+      <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+        <span class="fw-bold text-dark">حالة التداول:</span>
+        <div class="text-end">${sessionBadge} <div class="small text-muted" style="font-size:10px;">(تفتح ${escapeHtml(data.nextSessionStr)})</div></div>
+      </div>
+      
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <div class="metric-box bg-light border-primary p-2">
+            <div class="small text-muted fw-bold" style="font-size:11px;">القوة الشرائية الكلية للمصنع</div>
+            <div class="fw-bold text-primary fs-6 mt-1">${formatCurrency(data.purchasingPower)} ج.م</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="metric-box bg-light border-info p-2">
+            <div class="small text-muted fw-bold" style="font-size:11px;">رصيد CIB الجاهز للتنفيذ</div>
+            <div class="fw-bold text-info fs-6 mt-1">${formatCurrency(data.cibBalance)} ج.م</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="metric-box bg-light border-success p-2">
+            <div class="small text-muted fw-bold" style="font-size:11px;">رصيد MTF المتاح للاسترداد</div>
+            <div class="fw-bold text-success fs-6 mt-1">${formatCurrency(data.mtfAvailable)} ج.م</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="metric-box bg-light border-warning p-2">
+            <div class="small text-muted fw-bold" style="font-size:11px;">أموال قيد التحويل (T+1)</div>
+            <div class="fw-bold text-warning fs-6 mt-1">${formatCurrency(data.tPlus1Pending)} ج.م</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-info py-2" style="font-size:11.5px; border-right: 4px solid #0dcaf0;">
+        <strong>⏱️ المستشار الآلي:</strong> بناءً على الالتزامات والأقساط، متاح ربط السيولة الفائضة لمدة أقصاها <b class="text-danger">${data.safeHorizonDays} يوم عمل</b>. 
+        <br>(أول كسر متوقع للاحتياطي أو عجز في البنوك سيكون بتاريخ: <span class="fw-bold">${escapeHtml(data.horizonDateStr)}</span>).
+      </div>
+      
+      <div class="bg-white border rounded p-3 mb-2 shadow-sm">
+          <div class="mb-3">
+              <label class="form-label small fw-bold text-dark">المبلغ المطلوب (ج.م):</label>
+              <input type="number" id="mtf-amount" class="form-control form-control-sm fw-bold border-primary" placeholder="أدخل المبلغ...">
+          </div>
+          <div class="row g-2">
+              <div class="col-6">
+                  <button class="btn btn-success w-100 fw-bold btn-sm py-2" onclick="executeMTF('BUY')" ${actionDisabled}>إيداع / شراء 📥</button>
+              </div>
+              <div class="col-6">
+                  <button class="btn btn-danger w-100 fw-bold btn-sm py-2" onclick="executeMTF('SELL')" ${actionDisabled}>استرداد / سحب 📤</button>
+              </div>
+          </div>
+          <div class="text-center mt-2 small text-muted" style="font-size:10px;">
+              ⚠️ الإيداع يتطلب توافر المبلغ في <b>CIB</b>. الاسترداد يتم ترحيله كوارد معلق ليوم العمل التالي <b>(T+1)</b>.
+          </div>
+      </div>
+    `;
+    document.getElementById('mtf-treasury-body').innerHTML = html;
+  }
+
+  function executeMTF(actionType) {
+    var amt = document.getElementById('mtf-amount').value;
+    if (!amt || isNaN(amt) || amt <= 0) { alert('الرجاء إدخال مبلغ صحيح.'); return; }
+    
+    var btnBuy = document.querySelector("#mtfTreasuryModal .btn-success");
+    var btnSell = document.querySelector("#mtfTreasuryModal .btn-danger");
+    if(btnBuy) { btnBuy.innerText = 'جاري التنفيذ...'; btnBuy.disabled = true; }
+    if(btnSell) { btnSell.innerText = 'جاري التنفيذ...'; btnSell.disabled = true; }
+    
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+            alert("✅ " + res.message);
+            var modalEl = document.getElementById('mtfTreasuryModal'); 
+            var mModal = bootstrap.Modal.getInstance(modalEl); 
+            if (mModal) mModal.hide();
+            google.script.run.withSuccessHandler(populateDashboard).getHomeScreenData();
+        } else {
+            alert("❌ خطأ: " + res.error);
+            if(btnBuy) { btnBuy.innerText = 'إيداع / شراء 📥'; btnBuy.disabled = false; }
+            if(btnSell) { btnSell.innerText = 'استرداد / سحب 📤'; btnSell.disabled = false; }
+        }
+    }).withFailureHandler(function(err) {
+        alert("❌ فشل الاتصال: " + err.message);
+        if(btnBuy) { btnBuy.innerText = 'إيداع / شراء 📥'; btnBuy.disabled = false; }
+        if(btnSell) { btnSell.innerText = 'استرداد / سحب 📤'; btnSell.disabled = false; }
+    }).executeMTFTransaction(actionType, amt);
+  }
+
+</script>

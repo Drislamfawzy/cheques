@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>لوحة التحكم</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+  <?!= include('CSS'); ?>
+</head>
+<body class="pb-5 mb-5" style="padding-bottom: 90px !important;">
+
+  <nav class="navbar navbar-dark bg-dark mb-3 shadow-sm px-3">
+    <span class="navbar-brand fw-bold fs-6">💼 لوحة التحكم </span>
+    <button class="btn btn-sm btn-outline-light" onclick="toggleDarkMode()">🌙 Night Mode</button>
+  </nav>
+
+  <div class="container mb-5 pb-4">
+
+    <div id="dashboard-view" class="view-section">
+      <div id="liquidity-badge" class="liquidity-badge liquidity-safe mb-2 text-center">
+        الوضع: آمن 🟢
+      </div>
+      
+      <!-- اللقطة التنفيذية وملاحظة الثقة -->
+      <div id="executive-snapshot" class="text-center mb-1 fw-bold fs-4"></div>
+      <div id="confidence-note" class="text-center text-muted small mb-3"></div>
+
+      <!-- بطاقة مهام اليوم المختصرة -->
+      <div class="card border-warning shadow-sm mb-3">
+        <div class="card-header bg-warning text-dark py-1 fw-bold small">🎯 (مهام عاجلة ومتأخرة)</div>
+        <div class="card-body py-2 p-1" id="today-tasks-container">
+          <span class="text-muted small">جاري الفحص...</span>
+        </div>
+      </div>
+
+      <!-- صف الأزرار الأربعة الاستراتيجية المحدث -->
+      <div class="row g-2 mb-3">
+        <div class="col-3">
+          <button class="btn btn-outline-dark w-100 btn-sm fw-bold" onclick="openCashFlowModal()" style="font-size:11px;">📈 التوقعات</button>
+        </div>
+        <div class="col-3">
+          <button class="btn btn-outline-danger w-100 btn-sm fw-bold" onclick="openShockSimulatorModal()" style="font-size:11px;">🛡️ إختبار التحمل</button>
+        </div>
+        <div class="col-3">
+          <button class="btn btn-outline-primary w-100 btn-sm fw-bold" onclick="openMTFModal()" style="font-size:11px;">🏦 خزانة MTF</button>
+        </div>
+        <div class="col-3">
+          <button class="btn btn-outline-dark w-100 btn-sm fw-bold" onclick="tryOpenFinancialProject()" style="font-size:11px;">🧭 الإدارة الماليه</button>
+        </div>
+      </div>
+
+      <!-- حاوية صندوق MTF المعزول (درع الطوارئ) -->
+      <div id="mtf-panel-row" class="row g-2 mb-3"></div>
+
+      <!-- بطاقات الأرصدة الفعلية للبنوك العادية -->
+      <div id="bank-panels-row" class="row g-2 mb-3"></div>
+
+      <!-- بطاقات الواردات والصادرات المعلقة -->
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <div class="card border-success shadow-sm" style="cursor:pointer;" onclick="toggleCardDetails('in-details-box')">
+            <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+              <div class="d-flex align-items-center gap-2">
+                <span class="fw-bold small text-success">📥 الواردات المعلقة</span>
+                <span class="badge bg-success" style="font-size: 10px;">العدد: <span id="in-count">-</span></span>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <h5 id="in-total" class="text-success fw-bold mb-0">0 ج.م</h5>
+                <span class="text-muted fw-bold" style="font-size: 12px;">▼</span>
+              </div>
+            </div>
+          </div>
+          <div id="in-details-box" class="d-none mt-1 p-2 border border-success rounded bg-white shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="small text-muted">عرض تفاصيل الكروت التفاعلية والمستندات</span>
+              <button class="btn btn-sm btn-outline-success py-0 px-2" style="font-size: 11px;" onclick="openActiveChequesModal()">فتح الكروت ↗️</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <div class="card border-danger shadow-sm" style="cursor:pointer;" onclick="toggleCardDetails('out-details-box')">
+            <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+              <div class="d-flex align-items-center gap-2">
+                <span class="fw-bold small text-danger">📤 الصادرات والالتزامات</span>
+                <span class="badge bg-danger" style="font-size: 10px;">العدد: <span id="out-count">-</span></span>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <h5 id="out-total" class="text-danger fw-bold mb-0">0 ج.م</h5>
+                <span class="text-muted fw-bold" style="font-size: 12px;">▼</span>
+              </div>
+            </div>
+          </div>
+          <div id="out-details-box" class="d-none mt-1 p-2 border border-danger rounded bg-white shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="small text-muted">عرض تفاصيل الكروت التفاعلية والمستندات</span>
+              <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size: 11px;" onclick="openActiveChequesModal()">فتح الكروت ↗️</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="add-cheque-view" class="view-section d-none">
+      <div class="row justify-content-center">
+        <div class="col-12 col-md-8">
+          <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white fw-bold small">إضافة وتوثيق معاملة مالية جديدة (شيك / تحويل)</div>
+            <div class="card-body">
+              
+              <div class="mb-3">
+                <label class="form-label small fw-bold text-muted">طريقة الدفع / المعاملة</label>
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="instrumentTypeRadio" id="inst-cheque" value="CHEQUE" checked onchange="toggleInstrumentType()">
+                  <label class="btn btn-outline-dark btn-sm fw-bold" for="inst-cheque">📄 شيك</label>
+                  <input type="radio" class="btn-check" name="instrumentTypeRadio" id="inst-transfer" value="BANK_TRANSFER" onchange="toggleInstrumentType()">
+                  <label class="btn btn-outline-dark btn-sm fw-bold" for="inst-transfer">🏦 تحويل بنكي / InstaPay</label>
+                </div>
+              </div>
+
+              <div class="mb-3 text-center">
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="chequeTypeRadio" id="type-incoming" value="INCOMING" checked onchange="toggleTransactionType()">
+                  <label class="btn btn-outline-success btn-sm" for="type-incoming">وارد 📥</label>
+                  <input type="radio" class="btn-check" name="chequeTypeRadio" id="type-outgoing" value="OUTGOING" onchange="toggleTransactionType()">
+                  <label class="btn btn-outline-danger btn-sm" for="type-outgoing">صادر 📤</label>
+                </div>
+              </div>
+
+              <div class="mb-3 d-none" id="expense-category-container">
+                <label class="form-label small fw-bold text-danger">🏷️ تصنيف المصروف الثابت (الصادر)</label>
+                <select id="expense-category-select" class="form-select form-select-sm fw-bold border-danger">
+                  <option value="">-- اختر بند المصروف الثابت --</option>
+                  <option value="مرتبات">مرتبات</option>
+                  <option value="شراء خامات">شراء خامات</option>
+                  <option value="نقل">نقل</option>
+                  <option value="كهرباء">كهرباء</option>
+                  <option value="مياه">مياه</option>
+                  <option value="حق انتفاع">حق انتفاع</option>
+                  <option value="أكياس">أكياس</option>
+                  <option value="مستلزمات نظافة">مستلزمات نظافة</option>
+                  <option value="فاتورة تليفون">فاتورة تليفون</option>
+                  <option value="بوليصة تأمين">بوليصة تأمين</option>
+                  <option value="صيانة">صيانة</option>
+                  <option value="قطع غيار">قطع غيار</option>
+                  <option value="قسط بنك">قسط بنك</option>
+                  <option value="تجديد أوراق">تجديد أوراق</option>
+                  <option value="تأمينَات">تأمينَات</option>
+                  <option value="سيارة شخصي">سيارة شخصي</option>
+                  <option value="نثريات">نثريات</option>
+                </select>
+              </div>
+
+              <div class="mb-3 text-center bg-light p-3 rounded border">
+                <label class="form-label small fw-bold text-dark d-block mb-2">📸 صورة المستند / الإيصال (ضغط تلقائي)</label>
+                <div class="row g-2 mb-2">
+                  <div class="col-6">
+                    <label class="btn btn-outline-primary btn-sm w-100 fw-bold py-2 mb-0" style="cursor:pointer;">
+                      📷 التقاط بالكاميرا
+                      <input type="file" id="cheque-camera-input" accept="image/*" capture="environment" class="d-none" onchange="handleImageSelect(event)">
+                    </label>
+                  </div>
+                  <div class="col-6">
+                    <label class="btn btn-outline-secondary btn-sm w-100 fw-bold py-2 mb-0" style="cursor:pointer;">
+                      📁 من الأستوديو
+                      <input type="file" id="cheque-studio-input" accept="image/*" class="d-none" onchange="handleImageSelect(event)">
+                    </label>
+                  </div>
+                </div>
+                <img id="image-preview" class="img-fluid rounded border d-none mx-auto mt-2" style="max-height:160px; display:block;">
+              </div>
+
+              <form id="cheque-form" onsubmit="event.preventDefault(); saveChequeData();">
+                <div class="mb-2">
+                  <label class="form-label small fw-bold" id="party-label">اسم المستفيد / الساحب</label>
+                  <select id="party-name-select" class="form-select form-select-sm mb-1" onchange="handlePartySelectChange()">
+                    <option value="">-- اختر الطرف --</option>
+                    <option value="TEMA">TEMA</option>
+                    <option value="ADDME">ADDME</option>
+                    <option value="FOODY">FOODY</option>
+                    <option value="TAWOOS">TAWOOS</option>
+                    <option value="DELTA">DELTA</option>
+                    <option value="MARINA">MARINA</option>
+                    <option value="ALFARID">ALFARID</option>
+                    <option value="EGY">EGY</option>
+                    <option value="OTHER">OTHER (أخرى)</option>
+                  </select>
+                  <input type="text" id="party-name-other" class="form-control form-control-sm d-none" placeholder="اكتب اسم الطرف يدوياً...">
+                </div>
+
+                <div class="row g-2">
+                  <div class="col-6 mb-2">
+                    <label class="form-label small fw-bold">اسم البنك / القناة</label>
+                    <select id="bank-name-select" class="form-select form-select-sm fw-bold">
+                      <option value="NBE">NBE (البنك الأهلي)</option>
+                      <option value="BM">BM (بنك مصر)</option>
+                      <option value="CIB">CIB (التجاري الدولي)</option>
+                      <option value="MTF">MTF (صندوق استثمار)</option>
+                    </select>
+                  </div>
+
+                  <div class="col-6 mb-2">
+                    <label class="form-label small fw-bold" id="number-label">رقم الشيك / المرجع</label>
+                    <input type="text" id="cheque-number" class="form-control form-control-sm fw-bold text-primary" placeholder="رقم المعاملة">
+                  </div>
+                </div>
+
+                <div class="row g-2">
+                  <div class="col-4 mb-2">
+                    <label class="form-label small fw-bold">المبلغ (ج.م)</label>
+                    <input type="number" id="cheque-amount" class="form-control form-control-sm" placeholder="المبلغ">
+                  </div>
+                  <div class="col-4 mb-2">
+                    <label class="form-label small fw-bold" id="date-label">تاريخ الاستحقاق</label>
+                    <input type="date" id="due-date" class="form-control form-control-sm">
+                  </div>
+                  <div class="col-4 mb-2">
+                    <label class="form-label small fw-bold text-primary">تاريخ الفاتورة</label>
+                    <input type="date" id="invoice-date" class="form-control form-control-sm">
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label small fw-bold">ملاحظات</label>
+                  <input type="text" id="cheque-notes" class="form-control form-control-sm" placeholder="ملاحظات...">
+                </div>
+
+                <button type="submit" id="save-cheque-btn" class="btn btn-success w-100 fw-bold btn-sm py-2">💾 حفظ المعاملة المالية</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- زر عائم للحركة السريعة -->
+  <button type="button" class="btn btn-warning rounded-circle shadow-lg position-fixed" style="bottom: 75px; left: 20px; z-index: 2005; width: 52px; height: 52px; font-size: 22px; display: flex; align-items: center; justify-content: center;" onclick="openQuickTransactionModal()" title="حركة سريعة">⚡</button>
+
+  <!-- نافذة محاكي إختبار التحمل -->
+  <div class="modal fade" id="shockSimulatorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-danger text-white py-2">
+          <h6 class="modal-title fw-bold">🛡️ محاكي إختبار التحمل</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small fw-bold">نسبة تأخير الإيرادات:</label>
+            <select id="shock-delay-percent" class="form-select form-select-sm fw-bold">
+              <option value="20">تأخير 20%</option>
+              <option value="40">تأخير 40%</option>
+              <option value="60">تأخير 60%</option>
+              <option value="100">تأخير تامة 100%</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold">عدد الأيام (أفق الاختبار):</label>
+            <input type="number" id="shock-horizon-days" class="form-control form-control-sm fw-bold" value="30">
+            <div class="form-text text-muted" style="font-size: 10px;">مثال: أدخل عدد الأيام حتى موعد التزام تعاقدي معين.</div>
+          </div>
+          <button type="button" class="btn btn-danger w-100 fw-bold btn-sm py-2 mb-3" onclick="runShockSimulationUI()">📊 احسب النتيجة تحت الضغط</button>
+          
+          <div id="shock-result-container" class="border rounded p-2 bg-light d-none" style="font-size: 11px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة مركز قيادة خزانة MTF الجديدة -->
+  <div class="modal fade" id="mtfTreasuryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white py-2">
+          <h6 class="modal-title fw-bold">🏦 مركز إدارة السيولة وصندوق MTF</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="mtf-treasury-body">
+          <div class="text-center text-muted py-3">جاري تحليل الأرصدة والسوق...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة الترحيب (مَاشَاءَ اللَّهُ، لَا قُوَّةَ إِلَّا بِاللَّهِ) -->
+  <div class="modal fade" id="welcomeModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content text-center p-4 border-0 shadow-lg" style="background: linear-gradient(135deg, #f8f9fa, #e9ecef);">
+        <div class="modal-body">
+          <h3 class="fw-bold text-success mb-4" style="font-family: 'Cairo', sans-serif;">مَاشَاءَ اللَّهُ، لَا قُوَّةَ إِلَّا بِاللَّهِ</h3>
+          <button type="button" class="btn btn-success px-4 py-2 fw-bold" data-bs-dismiss="modal">دخول 🚀</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="activeChequesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2 flex-wrap gap-2">
+          <h6 class="modal-title m-0" id="modal-main-title">📋 المعاملات المعلقة والكروت التفاعلية</h6>
+          <div class="d-flex flex-wrap gap-1 align-items-center">
+            <button class="btn btn-sm btn-outline-light" type="button" onclick="toggleSortOrder()" id="sort-toggle-btn">⬇️ الأقرب أولاً</button>
+            <button class="btn btn-sm btn-outline-info text-white" type="button" onclick="toggleClearedChequesView()">📁 الأرشيف</button>
+            <button class="btn btn-sm btn-outline-secondary text-white" type="button" onclick="refreshMissingImages()" title="تحديث روابط الصور غير المربوطة يدوياً">🔄 تحديث الصور</button>
+            <button class="btn btn-sm btn-outline-success text-white" type="button" onclick="shareWhatsAppReport()">💬 واتساب</button>
+            <button class="btn btn-sm btn-outline-warning text-white" type="button" onclick="sendEmailReport()">📧 إيميل</button>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+        </div>
+        <div class="modal-body bg-light">
+          <div class="dropdown mb-3">
+            <button class="btn btn-sm btn-primary dropdown-toggle fw-bold" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
+              🔍 تصفية الاستحقاق 🔽
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <li><a class="dropdown-item" href="javascript:void(0);" onclick="filterByPeriod('ALL')">المدة كاملة</a></li>
+              <li><a class="dropdown-item" href="javascript:void(0);" onclick="filterByPeriod('WEEK')">أسبوع</a></li>
+              <li><a class="dropdown-item" href="javascript:void(0);" onclick="filterByPeriod('MONTH')">شهر</a></li>
+              <li><a class="dropdown-item" href="javascript:void(0);" onclick="filterByPeriod('QUARTER')">3 شهور</a></li>
+            </ul>
+          </div>
+
+          <div class="filter-chips-container mb-3">
+            <div class="filter-chip active" onclick="filterByChip('ALL', this)">الكل</div>
+            <div class="filter-chip" onclick="filterByChip('TODAY', this)">استحقاق اليوم</div>
+            <div class="filter-chip" onclick="filterByChip('OVERDUE', this)">متأخرة ⚠️</div>
+            <div class="filter-chip" onclick="filterByChip('INCOMING', this)">واردة 📥</div>
+            <div class="filter-chip" onclick="filterByChip('OUTGOING', this)">صادرة 📤</div>
+          </div>
+
+          <div class="mb-2" id="batch-action-bar">
+            <button class="btn btn-sm btn-warning fw-bold w-100 py-2" type="button" onclick="openBatchClearModal()">⚡ تفعيل التحصيل/التنفيذ الجماعي</button>
+          </div>
+
+          <input type="text" id="live-search-input" class="form-control form-control-sm mb-3" placeholder="🔍 بحث فوري بالاسم أو البنك أو الرقم..." onkeyup="filterChequesCards()">
+          <div id="cheques-cards-container" class="row g-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="quickClearModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-warning text-dark py-2">
+          <h6 class="modal-title fw-bold">⚡ تسجيل التحصيل/التنفيذ السريع</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-bold small">أدخل رقم المعاملة أو الشيك (أو أرقام مفصولة بفاصلة):</label>
+            <textarea id="quick-clear-num" class="form-control fw-bold text-center" rows="2" placeholder="مثال: 12345, 67890"></textarea>
+          </div>
+          <button type="button" class="btn btn-warning w-100 fw-bold btn-sm py-2" onclick="executeQuickClear()">✅ تنفيذ وتحويل الحالة إلى "تم التحصيل"</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="quickTransactionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h6 class="modal-title fw-bold">⚡ حركة نقدية سريعة</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small fw-bold">الحساب الأساسي (مِن):</label>
+            <select id="qt-bank" class="form-select form-select-sm fw-bold">
+              <option value="NBE">NBE (البنك الأهلي)</option>
+              <option value="BM">BM (بنك مصر)</option>
+              <option value="CIB">CIB (التجاري الدولي)</option>
+              <option value="MTF">MTF (صندوق استثمار)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold">المبلغ (ج.م):</label>
+            <input type="number" id="qt-amount" class="form-control form-control-sm" placeholder="المبلغ">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold">الاتجاه:</label>
+            <div class="btn-group w-100" role="group">
+              <input type="radio" class="btn-check" name="qtDir" id="qt-dir-in" value="IN" checked onchange="toggleTransferBank()">
+              <label class="btn btn-outline-success btn-sm" for="qt-dir-in">إيداع 📥</label>
+              <input type="radio" class="btn-check" name="qtDir" id="qt-dir-out" value="OUT" onchange="toggleTransferBank()">
+              <label class="btn btn-outline-danger btn-sm" for="qt-dir-out">سحب 📤</label>
+              <input type="radio" class="btn-check" name="qtDir" id="qt-dir-transfer" value="TRANSFER" onchange="toggleTransferBank()">
+              <label class="btn btn-outline-primary btn-sm" for="qt-dir-transfer">تحويل داخلي 🔄</label>
+            </div>
+          </div>
+          <div class="mb-3 d-none" id="qt-to-bank-container">
+            <label class="form-label small fw-bold">الحساب المحول إليه (إلى):</label>
+            <select id="qt-to-bank" class="form-select form-select-sm fw-bold">
+              <option value="NBE">NBE (البنك الأهلي)</option>
+              <option value="BM">BM (بنك مصر)</option>
+              <option value="CIB">CIB (التجاري الدولي)</option>
+              <option value="MTF">MTF (صندوق استثمار)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold">السبب / الملاحظة:</label>
+            <input type="text" id="qt-reason" class="form-control form-control-sm" placeholder="سبب الحركة...">
+          </div>
+          <button type="button" class="btn btn-dark w-100 fw-bold btn-sm py-2" onclick="submitQuickTransaction()">💾 حفظ الحركة النقدية</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="reconciliationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white py-2">
+          <h6 class="modal-title fw-bold" id="rec-modal-title">🏦 تسوية الرصيد الفعلي للبنك</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="rec-bank-name">
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-bold">الرصيد المتوقع بالسيستم:</label>
+              <input type="text" id="rec-expected-display" class="form-control form-control-sm fw-bold bg-light" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-bold">الرصيد الفعلي من كشف البنك:</label>
+              <input type="number" id="rec-actual-input" class="form-control form-control-sm fw-bold text-primary" placeholder="أدخل الرصيد الفعلي...">
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary w-100 fw-bold btn-sm py-2 mb-3" onclick="submitReconciliation()">✅ حفظ التسوية وإرسال التنبيهات</button>
+          
+          <hr>
+          <h6 class="fw-bold small text-muted mb-2">📈 منحنى الفارق التاريخي للتسويات السابقة:</h6>
+          <div id="variance-chart-container" class="border rounded p-2 bg-light text-center" style="min-height: 150px;">
+            <span class="text-muted small">جاري تحميل الرسم البياني...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="cashFlowModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h6 class="modal-title fw-bold">📈 التوقعات النقدية</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="btn-group w-100 mb-3" role="group">
+            <button class="btn btn-sm btn-outline-primary" onclick="loadCashFlow(7)">أسبوع</button>
+            <button class="btn btn-sm btn-outline-primary" onclick="loadCashFlow(30)">شهر</button>
+            <button class="btn btn-sm btn-outline-primary" onclick="loadCashFlow(90)">3 شهور</button>
+          </div>
+          <div id="cashflow-result"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="decisionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-sm-down modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h6 class="modal-title fw-bold">🧭 لوحة الإداره المالية</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="decision-dashboard-body">
+          <div class="text-center text-muted small py-4">جاري التحميل...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- شريط التنقل السفلي الثابت -->
+  <div class="mobile-bottom-nav">
+    <button type="button" onclick="goToHomeDirectly()"><span>🏠</span>الرئيسية</button>
+    <button type="button" onclick="openAddCheque()"><span>➕</span>إضافة</button>
+    <button type="button" onclick="openQuickClearModal()"><span>⚡</span>تحصيل</button>
+    <button type="button" onclick="openClearedChequesModal()"><span>📁</span>المحصلة</button>
+    <button type="button" onclick="openActiveChequesModal()"><span>📋</span>المعلقة</button>
+  </div>
+
+  <!-- إضافة defer حتى لا يُعطّل تحميل هذا الملف الخارجي رسم باقي عناصر الصفحة -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+  <?!= include('JS'); ?>
+</body>
+</html>

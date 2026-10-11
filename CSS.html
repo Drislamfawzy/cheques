@@ -1,0 +1,174 @@
+<!-- ==================== CSS.html ==================== -->
+<style>
+  body {
+    font-family: 'Cairo', sans-serif;
+    background-color: #f8f9fa;
+    -webkit-text-size-adjust: 100%;
+  }
+  body.dark-mode {
+    background-color: #121212 !important;
+    color: #e0e0e0 !important;
+  }
+  body.dark-mode .card {
+    background-color: #1e1e1e !important;
+    color: #e0e0e0 !important;
+    border-color: #333 !important;
+  }
+  body.dark-mode .modal-content {
+    background-color: #1e1e1e !important;
+    color: #e0e0e0 !important;
+  }
+  body.dark-mode .form-control, body.dark-mode .form-select {
+    background-color: #2c2c2c !important;
+    color: #fff !important;
+    border-color: #444 !important;
+  }
+
+  /* تحسين شريط التنقل السفلي للموبايل */
+  .mobile-bottom-nav {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: #212529 !important;
+    box-shadow: 0 -3px 15px rgba(0,0,0,0.6) !important;
+    z-index: 2000 !important;
+    display: flex !important;
+    justify-content: space-around !important;
+    padding: 10px 0 env(safe-area-inset-bottom, 10px) !important;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+  }
+  .mobile-bottom-nav button {
+    background: transparent;
+    border: none;
+    color: #adb5bd;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    width: 20%;
+    touch-action: manipulation;
+  }
+  .mobile-bottom-nav button:hover, .mobile-bottom-nav button:active {
+    color: #fff;
+  }
+  .mobile-bottom-nav button span {
+    font-size: 20px;
+    margin-bottom: 2px;
+  }
+
+  .filter-chips-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .filter-chips-container::-webkit-scrollbar {
+    display: none;
+  }
+  .filter-chip {
+    white-space: nowrap;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    border: 1px solid #ced4da;
+    background: #fff;
+    color: #495057;
+  }
+  .filter-chip.active {
+    background: #198754;
+    color: #fff;
+    border-color: #198754;
+  }
+
+  .liquidity-badge {
+    padding: 10px;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 14px;
+  }
+  .liquidity-safe { background:#d1e7dd; color:#0f5132; border:1px solid #badbcc; }
+  .liquidity-warning { background:#fff3cd; color:#664d03; border:1px solid #ffecb5; }
+  .liquidity-danger { background:#f8d7da; color:#842029; border:1px solid #f5c2c7; }
+
+  .metric-box {
+    background:#fff;
+    border-radius:10px;
+    padding:10px;
+    text-align:center;
+    border:1px solid #e9ecef;
+  }
+  body.dark-mode .metric-box { background:#1e1e1e; border-color:#333; }
+
+  .ladder-row td, .ladder-row th { font-size: 12px; padding: 6px; }
+
+  /* الحل الجذري التام لملء شاشة الموبايل بنسبة 100% بدون فراغات */
+  @media (max-width: 768px) {
+    html, body {
+      height: 100% !important;
+      overflow-x: hidden !important;
+    }
+
+    .modal {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: rgba(0,0,0,0.6) !important;
+      overflow: hidden !important;
+    }
+    
+    .modal-dialog,
+    .modal-dialog-centered,
+    .modal-dialog.modal-fullscreen {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: none !important;
+      max-height: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      transform: none !important;
+    }
+    
+    .modal-content {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
+      border: none !important;
+      border-radius: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    
+    .modal-body {
+      flex: 1 !important;
+      width: 100% !important;
+      height: auto !important;
+      max-height: none !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 100px !important;
+    }
+  }
+</style>
