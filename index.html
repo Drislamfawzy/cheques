@@ -1,36 +1,111 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>dr.islam ERP - نظام إدارة المصنع</title>
-    
-    <!-- ربط ملف الـ Manifest لتمكين التثبيت -->
-    <link rel="manifest" href="./manifest.json">
-    <meta name="theme-color" content="#4f46e5">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Dr. Islam Treasury - منظومة السيولة والخزانة</title>
+  
+  <!-- ربط ملف الـ Manifest لتمكين التثبيت كتطبيق -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0f172a">
 
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', sans-serif; }
-        body, html {
-            width: 100%;
-            height: 100%;
-            background: #0b0f19;
-            overflow: hidden;
-        }
-        /* إطار يملأ الشاشة بالكامل ويحفظ رابط جيت هب في الأعلى */
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: #ffffff;
-        }
-    </style>
+  <!-- إعدادات تطبيقات الآيفون (iOS Web App Native Feel) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="الخزانة الذكية">
+  <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/512/bank-building.png">
+  <link rel="icon" type="image/png" href="https://img.icons8.com/fluency/512/bank-building.png">
+
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;800&display=swap" rel="stylesheet">
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Cairo', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      height: 100dvh; /* يتوافق مع الشاشات الحديثة وشريط الآيفون السفلي */
+      background: #0f172a;
+      overflow: hidden;
+      position: fixed;
+      inset: 0;
+      overscroll-behavior: none; /* يمنع سحب الصفحة لأسفل عن طريق الخطأ */
+    }
+
+    /* شاشة التحميل المبدئية حتى يفتح سيرفر جوجل */
+    #app-loader {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      color: #f8fafc;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+    #app-loader.loaded {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 46px;
+      height: 46px;
+      border: 4px solid rgba(56, 189, 248, 0.2);
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin-bottom: 14px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* إطار النظام يملأ الشاشة بالكامل */
+    iframe {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      border: none;
+      display: block;
+      background: #0f172a;
+    }
+  </style>
 </head>
 <body>
 
-    <!-- استدعاء النظام بملء الشاشة مع بقاء رابط جيت هب في الأعلى -->
-    <iframe src="https://script.google.com/macros/s/AKfycbzVXx9zuPe_96PHPo3pboVS-3RJlJc3aeody_xmqRpRF-7JZkeENiaFcrIMTbe0jZpbDw/exec"></iframe>
+  <!-- مؤشر التحميل الأولي (يختفي فور استجابة جوجل) -->
+  <div id="app-loader">
+    <div class="spinner"></div>
+    <div style="font-size: 0.95rem; font-weight: 800; color: #fde047;">منظومة السيولة والخزانة الذكية</div>
+    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">جاري الاتصال المشفر بالخادم...</div>
+  </div>
+
+  <!-- استدعاء النظام مع منح تصريح الكاميرا والملفات والحافظة -->
+  <iframe 
+    id="gas-frame"
+    src="https://script.google.com/macros/s/AKfycbzVXx9zuPe_96PHPo3pboVS-3RJlJc3aeody_xmqRpRF-7JZkeENiaFcrIMTbe0jZpbDw/exec"
+    allow="camera *; microphone *; clipboard-write *; fullscreen *"
+    onload="document.getElementById('app-loader').classList.add('loaded');">
+  </iframe>
+
+  <script>
+    // تسجيل الـ Service Worker لتفعيل التثبيت كتطبيق مستقل (PWA) على الموبايل
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js').catch(function() {});
+      });
+    }
+  </script>
 
 </body>
 </html>
