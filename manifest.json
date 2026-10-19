@@ -1,15 +1,27 @@
 {
-  "name": "dr.islam ERP - نظام إدارة المصنع",
-  "short_name": "dr.islam ERP",
+  "name": "Dr. Islam Treasury - منظومة السيولة والخزانة",
+  "short_name": "الخزانة الذكية",
+  "description": "النظام المالي المتكامل لإدارة السيولة، البنوك، الشيكات، وصندوق أسواق النقد MTF",
+  "lang": "ar",
+  "dir": "rtl",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#0b0f19",
-  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
   "icons": [
     {
-      "src": "https://img.icons8.com/color/512/factory.png",
+      "src": "https://img.icons8.com/fluency/192/bank-building.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://img.icons8.com/fluency/512/bank-building.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
