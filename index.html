@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EIPI Factory ERP - PWA</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        #network-status { display: none; background: #dc2626; color: white; text-align: center; padding: 5px; font-family: 'Cairo'; font-weight: 700; font-size: 0.85rem; position: sticky; top: 0; z-index: 9999; }
+        #network-status.offline { display: block; }
+        #network-status.syncing { display: block; background: #d97706; }
+        body { margin: 0; padding: 0; font-family: 'Cairo', sans-serif; background-color: #f8fafc; }
+        #app-content { padding: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="network-status">أنت غير متصل بالإنترنت. سيتم حفظ البيانات محلياً والمزامنة لاحقاً.</div>
+
+    <div id="app-content">
+        <h2 style="text-align: center; color: #0f172a; margin-top: 50px;">
+            <i class="fa-solid fa-spinner fa-spin"></i> جاري تحميل النظام...
+        </h2>
+    </div>
+
+    <script>
+        // --- 1. إعدادات الـ API (ضع رابط جوجل سكريبت هنا) ---
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxkrVWDErmUpGlG4YN6K1z8psNQPsv3Fphko0BTYOvzvT5KAp3AeFOI7Ne0uiGPkTUPHg/exec";
+
+        // --- 2. تسجيل Service Worker ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker Registered'))
+                    .catch(err => console.error('Service Worker Error', err));
+            });
+        }
+
+        // --- 3. نظام المزامنة الذكي ---
+        const networkStatus = document.getElementById('network-status');
+        
+        window.addEventListener('online', () => {
+            networkStatus.className = 'syncing';
+            networkStatus.innerText = 'تمت استعادة الاتصال. جاري مزامنة البيانات...';
+            processOfflineQueue();
+        });
+
+        window.addEventListener('offline', () => {
+            networkStatus.className = 'offline';
+            networkStatus.innerText = 'أنت غير متصل بالإنترنت. سيتم حفظ البيانات محلياً والمزامنة لاحقاً.';
+        });
+
+        function saveToOfflineQueue(action, payload) {
+            let queue = JSON.parse(localStorage.getItem('erp_offline_queue')) || [];
+            queue.push({ id: Date.now(), action, payload });
+            localStorage.setItem('erp_offline_queue', JSON.stringify(queue));
+            alert("لا يوجد اتصال بالإنترنت. تم حفظ العملية بنجاح في جهازك وسيتم ترحيلها فور عودة الاتصال.");
+        }
+
+        async function processOfflineQueue() {
+            let queue = JSON.parse(localStorage.getItem('erp_offline_queue')) || [];
+            if (queue.length === 0) {
+                networkStatus.classList.remove('syncing', 'offline');
+                return;
+            }
+
+            for (let i = 0; i < queue.length; i++) {
+                try {
+                    await fetch(GAS_API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ action: queue[i].action, data: queue[i].payload })
+                    });
+                    queue.splice(i, 1);
+                    i--; 
+                    localStorage.setItem('erp_offline_queue', JSON.stringify(queue));
+                } catch (e) {
+                    console.error("فشل مزامنة عنصر:", e);
+                    break;
+                }
+            }
+            
+            if (queue.length === 0) {
+                networkStatus.classList.remove('syncing', 'offline');
+            }
+        }
+
+        // --- 4. المحرك البديل لـ google.script.run (API Wrapper) ---
+        window.erpApi = {
+            call: async function(action, payload, onSuccess, onFailure) {
+                if (!navigator.onLine) {
+                    saveToOfflineQueue(action, payload);
+                    if(onSuccess) onSuccess({ offline: true, message: "تم الحفظ محلياً" });
+                    return;
+                }
+
+                try {
+                    const response = await fetch(GAS_API_URL, {
+                        method: 'POST',
+                        redirect: 'follow',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: action, data: payload })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === "success") {
+                        if(onSuccess) {
+                            let output = result;
+                            if (result.data !== undefined) output = result.data;
+                            else if (result.message !== undefined) output = result.message;
+                            
+                            if (action === 'getDashboardMetrics_V3' || action === 'getComprehensiveReportsData') {
+                                output = result; 
+                            }
+                            
+                            onSuccess(output);
+                        }
+                    } else {
+                        if(onFailure) onFailure(result.message || "حدث خطأ غير معروف");
+                    }
+                } catch (error) {
+                    saveToOfflineQueue(action, payload);
+                    if(onSuccess) onSuccess({ offline: true, message: "فشل الاتصال بالخادم، تم حفظ العملية محلياً للمزامنة." });
+                }
+            }
+        };
+
+        // --- 5. نظام التوجيه (Router) ---
+        function navigateTo(pageName) {
+            window.location.hash = pageName;
+        }
+
+        async function renderPage() {
+            const hash = window.location.hash.substring(1) || 'Home';
+            const contentDiv = document.getElementById('app-content');
+            
+            try {
+                const response = await fetch(`./views/${hash}.html`); 
+                if (response.ok) {
+                    const html = await response.text();
+                    contentDiv.innerHTML = html;
+                    executePageScripts(contentDiv);
+                    
+                    // --- الحل السحري لتشغيل الشاشات بدون تعديلها ---
+                    setTimeout(() => {
+                        document.dispatchEvent(new Event('DOMContentLoaded'));
+                    }, 50);
+
+                } else {
+                    contentDiv.innerHTML = "<h3 style='text-align:center; color:red;'>الصفحة غير موجودة</h3>";
+                }
+            } catch(e) {
+                console.error("Router error:", e);
+            }
+        }
+
+        function executePageScripts(container) {
+            const scripts = container.querySelectorAll('script');
+            scripts.forEach(script => {
+                const newScript = document.createElement('script');
+                if (script.src) {
+                    newScript.src = script.src;
+                } else {
+                    newScript.textContent = script.textContent;
+                }
+                document.body.appendChild(newScript);
+                document.body.removeChild(newScript);
+            });
+        }
+
+        window.addEventListener('hashchange', renderPage);
+        window.addEventListener('load', renderPage);
+
+        // دالة العودة للرئيسية تعمل على كل الشاشات
+        window.goHome = function(e) {
+            if(e) e.preventDefault();
+            navigateTo('Home');
+        };
+    </script>
+</body>
+</html>
